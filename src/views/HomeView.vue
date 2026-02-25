@@ -8,8 +8,10 @@ import AppliencesToFix from "@/components/sections/AppliencesToFix.vue";
 import TheAboutFixly from "@/components/sections/TheAboutFixly.vue";
 import TheFooter from "@/components/layout/TheFooter.vue";
 import RequestQuoteModal from "@/components/RequestQuoteModal.vue";
-import BaseModal from "@/components/layout/BaseModal.vue";
 import SuccessModal from "@/components/modals/SuccessModal.vue";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+import ErrorModal from "@/components/modals/ErrorModal.vue";
+
 
 
 const isFormOpen = ref(false)
@@ -17,6 +19,17 @@ const isFormOpen = ref(false)
 const selectedAppliance = ref("")
 
 const isSuccessOpen= ref(false)
+
+const isErrorOpen = ref(false)
+const errorMessage = ref("")
+
+const requestModalRef = ref(null)
+
+function openError(message) {
+  console.log("OPEN ERROR MODAL:", message)
+  errorMessage.value = message || "Request failed"
+  isErrorOpen.value = true
+}
 
 function openForm (appliance = '') {
   closeAllModals()
@@ -36,29 +49,52 @@ function closeForm() {
 
 async function handleSubmit(payload) {
   console.log("FORM SUBMIT:", payload)
-  closeAllModals()
-  isSuccessOpen.value = true
 
-  try {
-    await fetch("https://example.com/api/quote", {
-      method: "POST",
+  try{
+    // Отправляем на наш Go бэкенд
+    const response = await fetch(`${API_BASE_URL}/api/orders`, {
+      method:"POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        client_name:payload.name,
+        phone:payload.phone,
+        device:payload.appliance,
+        problem:payload.description,
+        zip_code: payload.zipCode,
+        status:"new",
+        price: 0,
+      }),
+
     })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "")
+      throw new Error(`Server error ${response.status}: ${text}`)
+    }
+
+    const created = await response.json()
+
+    console.log("Создан заказ:", created)
+
+    requestModalRef.value?.resetForm?.()
+
+    // Показываем успех
+    closeAllModals()
+    isSuccessOpen.value = true
+
+    setTimeout(() => {
+      isSuccessOpen.value = false
+    }, 3000)
   } catch (e) {
-    console.error("Send error", e);
+    console.error("Ошибка отправки:", e)
+    openError(e?.message || "Network error")
   }
-
-
-  setTimeout(() => {
-    isSuccessOpen.value = false
-  }, 3000)
 }
 
 watch(
-    () => isFormOpen.value || isSuccessOpen.value,
+    () => isFormOpen.value || isSuccessOpen.value || isErrorOpen.value,
     (isAnyModalOpen) => {
       document.body.style.overflow = isAnyModalOpen ? "hidden" : "";
     }
@@ -77,6 +113,7 @@ watch(
   <TheFooter/>
 
   <RequestQuoteModal
+      ref="requestModalRef"
       :open="isFormOpen"
       :default-appliance = "selectedAppliance"
       @close="isFormOpen = false"
@@ -86,5 +123,11 @@ watch(
   :open = "isSuccessOpen"
   @close="isSuccessOpen = false"
   />
+  <ErrorModal
+      :open="isErrorOpen"
+      :message="errorMessage"
+      @close="isErrorOpen = false"
+  />
+
 
 </template>

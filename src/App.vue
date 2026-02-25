@@ -11,7 +11,7 @@ const isFormOpen = ref(true)
 <template>
 
 
-<HomeView/>
+<RouterView></RouterView>
 
 
 </template>

@@ -3,8 +3,8 @@
     <img src="../../assets/logo.png" alt="logo" class="w-14 md:w-20">
 
     <nav class="hidden md:flex gap-4 font-brand">
-      <a href="#" class=" font-brand font-medium">About Us</a>
-      <a href="#" class=" font-brand font-medium">Contact</a>
+      <a href="#" class=" font-brand font-medium hover:opacity-70">About Us</a>
+      <a href="#" class=" font-brand font-medium hover:opacity-70">Contact</a>
 
     </nav>
 

@@ -151,6 +151,8 @@ const isSubmitting = ref(false);
 
 
 
+
+
 function scrollToFirstError() {
   if (!form.appliance) {
     applianceRef.value?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -187,8 +189,8 @@ function onSubmit() {
   isSubmitting.value = true;
 
   emit('submit', {...form})
-  resetForm()
-  emit('close')
+  // resetForm()
+  // emit('close')
 
   setTimeout(() => {
     isSubmitting.value = false;
@@ -197,6 +199,7 @@ function onSubmit() {
 
 }
 
+defineExpose({ resetForm })
 // function resetForm() {
 //   form.appliance = ''
 //   form.name = ''
@@ -217,9 +220,11 @@ function onSubmit() {
 watch(
     () => props.open,
     async (isOpen) => {
-      if (isOpen) {
+      if (!isOpen) return
+
+      isSubmitting.value = false;
         form.appliance = props.defaultAppliance || "";
-      }
+
 
       await nextTick();
       nameInputRef.value?.focus();
