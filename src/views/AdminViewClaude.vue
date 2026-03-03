@@ -75,7 +75,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ViewOrderModal from '@/components/admin/ViewOrderModal.vue'
 import EditOrderModal from '@/components/admin/EditOrderModal.vue'
 import DeleteOrderModal from '@/components/admin/DeleteOrderModal.vue'
@@ -191,7 +191,25 @@ async function handleDelete() {
   // isDeleteModalOpen.value = false
 }
 
+// onMounted(() => {
+//   loadOrders()
+// })
+// Автоматическое обновление каждые 15 секунд
+let refreshInterval = null
+
 onMounted(() => {
   loadOrders()
+
+  // Запускаем автообновление
+  refreshInterval = setInterval(() => {
+    loadOrders()
+  }, 15000)  // 15 секунд
+})
+
+// Останавливаем при закрытии страницы
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+  }
 })
 </script>

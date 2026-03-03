@@ -146,7 +146,10 @@
             </div>
 
             <!-- Bid info -->
-            <div class="pt-4 border-t bg-yellow-50 -mx-6 -mb-6 px-6 py-4 rounded-b-lg">
+            <div
+                class="pt-4 border-t -mx-6 -mb-6 px-6 py-4 rounded-b-lg"
+                :class="getBidStatusClass(item)"
+            >
               <div class="flex items-center justify-between">
                 <div>
                   <p class="text-xs text-gray-600">Your bid:</p>
@@ -154,8 +157,29 @@
                 </div>
                 <div class="text-right">
                   <p class="text-xs text-gray-600">Status:</p>
-                  <p class="font-semibold text-yellow-600">Waiting</p>
+                  <p
+                      class="font-semibold"
+                      :class="getBidStatusTextClass(item)"
+                  >
+                    {{ getBidStatus(item) }}
+                  </p>
                 </div>
+              </div>
+
+              <!-- Если выиграл — показываем контакты клиента -->
+              <div v-if="isWinner(item)" class="mt-4 pt-4 border-t border-green-200">
+                <p class="text-sm font-semibold text-gray-900 mb-2">Client Contact:</p>
+                <p class="text-sm text-gray-700">📞 {{ item.order.phone }}</p>
+                <p class="text-sm text-gray-700">📍 ZIP: {{ item.order.zip_code }}</p>
+
+                <!-- Кнопка Mark as Completed -->
+                <button
+                    @click="markAsCompleted(item.order.id)"
+                    :disabled="completing[item.order.id]"
+                    class="mt-3 w-full py-2 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-md disabled:opacity-50"
+                >
+                  {{ completing[item.order.id] ? 'Completing...' : '✓ Mark as Completed' }}
+                </button>
               </div>
             </div>
           </div>
@@ -167,7 +191,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
@@ -264,9 +288,118 @@ function logout() {
   router.push('/contractors/login')
 }
 
+// Определяем статус ставки
+function getBidStatus(item) {
+  const order = item.order
+  const myId = parseInt(contractorId)
+
+  if (order.status === 'in_progress' && order.contractor_id === myId) {
+    return '🎉 You Won!'
+  }
+
+  if (order.status === 'in_progress' && order.contractor_id !== myId) {
+    return 'Not Selected'
+  }
+
+  if (order.status === 'completed') {
+    return 'Completed'
+  }
+
+  return 'Waiting...'
+}
+
+// Проверяем выиграл ли подрядчик
+function isWinner(item) {
+  const order = item.order
+  const myId = parseInt(contractorId)
+  return order.status === 'in_progress' && order.contractor_id === myId
+}
+
+// Класс фона для карточки
+function getBidStatusClass(item) {
+  if (isWinner(item)) {
+    return 'bg-green-50'  // Зелёный фон для победителя
+  }
+
+  const order = item.order
+  if (order.status === 'in_progress') {
+    return 'bg-gray-50'  // Серый для проигравших
+  }
+
+  return 'bg-yellow-50'  // Жёлтый для ожидающих
+}
+
+// Класс текста статуса
+function getBidStatusTextClass(item) {
+  if (isWinner(item)) {
+    return 'text-green-600'
+  }
+
+  const order = item.order
+  if (order.status === 'in_progress') {
+    return 'text-gray-600'
+  }
+
+  return 'text-yellow-600'
+}
+
+// onMounted(() => {
+//   loadOrders()
+//   loadMyBids()
+// })
+
+let refreshInterval = null
+
 onMounted(() => {
   loadOrders()
   loadMyBids()
+
+  // Автообновление
+  refreshInterval = setInterval(() => {
+    loadOrders()
+    loadMyBids()
+  }, 15000)
+})
+
+const completing = ref({})
+
+async function markAsCompleted(orderId) {
+  if (!confirm('Mark this order as completed?')) {
+    return
+  }
+
+  completing.value[orderId] = true
+
+  try {
+    const response = await fetch(`http://localhost:8080/api/orders/${orderId}/complete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+
+    if (!response.ok) {
+      alert('Failed to mark as completed')
+      return
+    }
+
+    alert('Order marked as completed!')
+
+    // Перезагружаем данные
+    await loadMyBids()
+
+  } catch (e) {
+    alert('Connection error')
+    console.error(e)
+  } finally {
+    completing.value[orderId] = false
+  }
+}
+
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+  }
 })
 </script>
 

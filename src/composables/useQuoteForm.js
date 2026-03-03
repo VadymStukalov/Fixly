@@ -7,6 +7,7 @@ export function useQuoteForm() {
         phone: "",
         zipCode: "",
         description: "",
+        telegram: ''
     });
 
     const isFormValid = computed(() =>

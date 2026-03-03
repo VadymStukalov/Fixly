@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Тест API</title>
+</head>
+<body>
+<h1>Создать заказ</h1>
+
+<input type="text" id="name" placeholder="Имя клиента">
+<input type="text" id="phone" placeholder="Телефон">
+<button onclick="createOrder()">Создать</button>
+
+<h2>Список заказов:</h2>
+<div id="orders"></div>
+
+<script>
+    // Создать заказ
+    async function createOrder() {
+        const name = document.getElementById('name').value;
+        const phone = document.getElementById('phone').value;
+
+        // Отправляем POST запрос на бэкенд
+        const response = await fetch('http://localhost:8080/api/orders', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                client_name: name,
+                phone: phone,
+                device: "Холодильник",
+                problem: "Тест",
+                status: "новый",
+                price: 0
+            })
+        });
+
+        const created = await response.json();
+        alert('Создан заказ с ID: ' + created.id);
+
+        // Обновляем список
+        loadOrders();
+    }
+
+    // Загрузить заказы
+    async function loadOrders() {
+        const response = await fetch('http://localhost:8080/api/orders');
+        const orders = await response.json();
+
+        const div = document.getElementById('orders');
+        div.innerHTML = orders.map(o =>
+            `<p>${o.id}. ${o.client_name} - ${o.phone}</p>`
+        ).join('');
+    }
+
+    // Загрузить при открытии
+    loadOrders();
+</script>
+</body>
+</html>
+```
+
+---
+
+## **Теперь:**
+
+1. **Запустите** сервер: `go run main.go`
+2. **Откройте** `test.html` в браузере (просто двойной клик на файл)
+3. **Введите** имя и телефон
+4. **Нажмите** "Создать"
+
+**ВЫ УВИДИТЕ** как фронтенд общается с бэкендом!
+
+---
+
+## **Что произойдёт:**
+```
+ФРОНТЕНД (test.html)          БЭКЕНД (Go)
+|                             |
+| POST /api/orders            |
+| {name: "Иван", ...}         |
+|---------------------------->|
+|                             | Получили JSON
+|                             | Создали заказ
+|                             | Сохранили в файл
+| {id: 1, name: "Иван"}       |
+|<----------------------------|
+|                             |
+Показали alert с ID                |

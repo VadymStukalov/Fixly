@@ -18,6 +18,16 @@
           <input
               type="radio"
               v-model="selectedStatus"
+              value="confirmed"
+              class="w-4 h-4 text-blue-600"
+          />
+          <span class="text-base">🔵 Confirmed</span>
+        </label>
+
+        <label class="flex items-center space-x-3 cursor-pointer">
+          <input
+              type="radio"
+              v-model="selectedStatus"
               value="in_progress"
               class="w-4 h-4 text-yellow-600"
           />
