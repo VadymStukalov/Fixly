@@ -39,6 +39,11 @@ const router = createRouter({
       path: '/contractors/dashboard',
       name: 'contractor-dashboard',
       component: ContractorDashboardView
+    },
+    {
+      path: '/accept/:token',
+      name: 'accept-job',
+      component: () => import('../views/AcceptJobView.vue')
     }
   ]
 })

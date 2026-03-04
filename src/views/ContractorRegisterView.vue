@@ -119,6 +119,7 @@ async function handleRegister() {
     // Save contractor ID
     localStorage.setItem('contractorId', contractor.id)
     localStorage.setItem('contractorName', contractor.name)
+    localStorage.setItem('contractorPhone', contractor.phone)
 
     // Redirect to dashboard
     router.push('/contractors/dashboard')
