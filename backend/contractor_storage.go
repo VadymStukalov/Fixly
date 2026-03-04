@@ -86,3 +86,27 @@ func (s *ContractorStorage) GetByID(id int) (*Contractor, error) {
 
 	return &c, nil
 }
+
+// GetAll возвращает всех подрядчиков
+func (s *ContractorStorage) GetAll() []Contractor {
+	query := "SELECT id, name, email, password_hash, phone, rating FROM contractors"
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return []Contractor{}
+	}
+	defer rows.Close()
+
+	contractors := []Contractor{}
+
+	for rows.Next() {
+		var c Contractor
+		err := rows.Scan(&c.ID, &c.Name, &c.Email, &c.PasswordHash, &c.Phone, &c.Rating)
+		if err != nil {
+			continue
+		}
+		contractors = append(contractors, c)
+	}
+
+	return contractors
+}

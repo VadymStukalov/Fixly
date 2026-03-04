@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -138,9 +139,6 @@ func main() {
 		}
 
 		// Дальше идёт ваш существующий код для PUT/DELETE
-		if r.Method == "PUT" {
-			// ...
-		}
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(200)
@@ -189,6 +187,19 @@ func main() {
 				http.Error(w, "Заказ не найден", 404)
 				return
 			}
+
+			// 👇 ВОТ СЮДА ВСТАВЛЯЕМ
+			if updated.Status == "confirmed" {
+				contractors := contractorStorage.GetAll()
+				if len(contractors) > 0 {
+					token := BroadcastJobToContractors(*updated, contractors, "https://fixly-eta.vercel.app")
+					err := SaveJobToken(db, updated.ID, token)
+					if err != nil {
+						fmt.Printf("❌ Failed to save token: %v\n", err)
+					}
+				}
+			}
+			// 👆 конец вставки
 
 			json.NewEncoder(w).Encode(updated)
 			return
@@ -508,127 +519,6 @@ func main() {
 		w.WriteHeader(201)
 		json.NewEncoder(w).Encode(created)
 	})
-	//http.HandleFunc("/api/bids", func(w http.ResponseWriter, r *http.Request) {
-	//	// CORS
-	//	w.Header().Set("Access-Control-Allow-Origin", "*")
-	//	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	//	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	//
-	//	if r.Method == "OPTIONS" {
-	//		w.WriteHeader(200)
-	//		return
-	//	}
-	//
-	//	w.Header().Set("Content-Type", "application/json")
-	//
-	//	if r.Method != "POST" {
-	//		http.Error(w, "Метод не поддерживается", 405)
-	//		return
-	//	}
-	//
-	//	// Читаем данные
-	//	var data struct {
-	//		OrderID      int    `json:"order_id"`
-	//		ContractorID int    `json:"contractor_id"`
-	//		ProposedTime string `json:"proposed_time"`
-	//	}
-	//	err := json.NewDecoder(r.Body).Decode(&data)
-	//
-	//	if err != nil {
-	//		http.Error(w, "Неверный формат JSON", 400)
-	//		return
-	//	}
-	//
-	//	// Валидация
-	//
-	//	if data.OrderID == 0 || data.ContractorID == 0 || data.ProposedTime == "" {
-	//		http.Error(w, "order_id, contractor_id и proposed_time обязательны", 400)
-	//		return
-	//	}
-	//
-	//	// Проверяем что заказ существует
-	//
-	//	order, found := storage.GetByID(data.OrderID)
-	//
-	//	if !found {
-	//		http.Error(w, "Заказ не найден", 404)
-	//		return
-	//	}
-	//
-	//	// Проверяем статус заказа
-	//
-	//	if order.Status != "confirmed" {
-	//		http.Error(w, "Этот заказ недоступен для ставок", 400)
-	//		return
-	//	}
-	//
-	//	// Проверяем что подрядчик ещё не делал ставку
-	//
-	//	hasBid, _ := bidStorage.HasBid(data.OrderID, data.ContractorID)
-	//
-	//	if hasBid {
-	//		http.Error(w, "Вы уже сделали ставку на этот заказ", 400)
-	//		return
-	//	}
-	//
-	//	// Создаём ставку
-	//
-	//	bid := Bid{
-	//		OrderID:      data.OrderID,
-	//		ContractorID: data.ContractorID,
-	//		ProposedTime: data.ProposedTime,
-	//	}
-	//
-	//	created, err := bidStorage.Create(bid)
-	//
-	//	if err != nil {
-	//		http.Error(w, "Ошибка создания ставки", 500)
-	//		return
-	//	}
-	//
-	//	// Проверяем статус заказа
-	//	order, found := storage.GetByID(created.OrderID)
-	//	if !found {
-	//		w.WriteHeader(201)
-	//		json.NewEncoder(w).Encode(created)
-	//		return
-	//	}
-	//
-	//	// Если заказ не "confirmed" — ничего не делаем
-	//	if order.Status != "confirmed" {
-	//		w.WriteHeader(201)
-	//		json.NewEncoder(w).Encode(created)
-	//		return
-	//	}
-	//
-	//	// Если ставка "Today" — назначаем СРАЗУ
-	//	if created.ProposedTime == "Today" {
-	//		err := storage.AssignContractor(created.OrderID, created.ContractorID)
-	//		if err != nil {
-	//			fmt.Println("❌ Ошибка назначения подрядчика:", err)
-	//		} else {
-	//			fmt.Printf("✅ Заказ #%d назначен подрядчику #%d (Today — мгновенно)\n", created.OrderID, created.ContractorID)
-	//		}
-	//
-	//		w.WriteHeader(201)
-	//		json.NewEncoder(w).Encode(created)
-	//		return
-	//	}
-	//
-	//	// Если НЕ "Today" — проверяем есть ли уже таймер
-	//	// Для MVP: запускаем таймер только для ПЕРВОЙ ставки
-	//	bids, _ := bidStorage.GetByOrderID(created.OrderID)
-	//	if len(bids) == 1 {
-	//		// Это первая ставка — запускаем таймер
-	//		delay := 30 * time.Minute // 30 минут
-	//		bidStorage.ScheduleSelection(created.OrderID, storage, delay)
-	//	}
-	//
-	//	w.WriteHeader(201)
-	//
-	//	json.NewEncoder(w).Encode(created)
-	//
-	//})
 
 	// POST /api/contractors/login — вход подрядчика
 	http.HandleFunc("/api/contractors/login", func(w http.ResponseWriter, r *http.Request) {
@@ -738,8 +628,148 @@ func main() {
 		json.NewEncoder(w).Encode(result)
 	})
 
+	// GET /accept/{token} — получить детали заказа по токену
+	http.HandleFunc("/accept/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(200)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		// Извлекаем токен из URL
+		parts := strings.Split(r.URL.Path, "/")
+		if len(parts) < 3 {
+			http.Error(w, "Invalid URL", 400)
+			return
+		}
+		token := parts[2]
+
+		if r.Method == "GET" {
+			order, err := GetOrderByToken(db, token)
+			if err != nil {
+				//http.Error(w, "Token not found or already used", 404)
+				//return
+				fmt.Printf("❌ GetOrderByToken error: %v\n", err)
+				http.Error(w, err.Error(), 404)
+				return
+			}
+			json.NewEncoder(w).Encode(order)
+			return
+		}
+
+		if r.Method == "POST" {
+			// Атомарно назначаем подрядчика — первый успел
+			order, err := GetOrderByToken(db, token)
+			if err != nil {
+				http.Error(w, "Token not found or already used", 404)
+				return
+			}
+
+			// Проверяем что заказ ещё confirmed
+			if order.Status != "confirmed" {
+				http.Error(w, "Order already taken", 400)
+				return
+			}
+
+			// Читаем contractor_id из тела
+			var data struct {
+				ContractorID int `json:"contractor_id"`
+			}
+			json.NewDecoder(r.Body).Decode(&data)
+
+			if data.ContractorID == 0 {
+				http.Error(w, "contractor_id required", 400)
+				return
+			}
+
+			// Назначаем подрядчика
+			err = storage.AssignContractor(order.ID, data.ContractorID)
+			if err != nil {
+				http.Error(w, "Failed to assign contractor", 500)
+				return
+			}
+
+			// Помечаем токен использованным
+			MarkTokenUsed(db, token)
+
+			fmt.Printf("✅ Order #%d accepted by contractor #%d via token\n", order.ID, data.ContractorID)
+			json.NewEncoder(w).Encode(map[string]bool{"success": true})
+			return
+		}
+
+		http.Error(w, "Method not supported", 405)
+	})
+
+	// POST /api/call — инициируем звонок подрядчику через Twilio
+	http.HandleFunc("/api/call", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(200)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method != "POST" {
+			http.Error(w, "Method not supported", 405)
+			return
+		}
+
+		var data struct {
+			ContractorPhone string `json:"contractor_phone"`
+			ClientPhone     string `json:"client_phone"`
+			OrderID         int    `json:"order_id"`
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&data)
+		if err != nil || data.ContractorPhone == "" || data.ClientPhone == "" {
+			http.Error(w, "contractor_phone and client_phone required", 400)
+			return
+		}
+
+		err = InitiateCall(data.ContractorPhone, data.ClientPhone, data.OrderID)
+		if err != nil {
+			fmt.Printf("❌ Call error: %v\n", err)
+			http.Error(w, "Failed to initiate call", 500)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
+	})
+
+	// POST /api/twiml — TwiML инструкция для Twilio (соединить с клиентом)
+	http.HandleFunc("/api/twiml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/xml")
+
+		clientPhone := r.URL.Query().Get("client_phone")
+		orderID := r.URL.Query().Get("order_id")
+
+		fmt.Printf("📞 TwiML called, connecting to client %s (order %s)\n", clientPhone, orderID)
+
+		w.Write([]byte(fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say>Connecting you to your client now.</Say>
+    <Dial callerId="%s">%s</Dial>
+</Response>`, TWILIO_PHONE, clientPhone)))
+	})
+
 	// Запускаем сервер
-	fmt.Println("🚀 Сервер запущен на http://localhost:8080")
-	http.ListenAndServe(":8080", nil)
+	//fmt.Println("🚀 Сервер запущен на http://localhost:8080")
+	//http.ListenAndServe(":8080", nil)
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	fmt.Println("🚀 Сервер запущен на порту", port)
+	http.ListenAndServe(":"+port, nil)
 
 }

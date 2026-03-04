@@ -4,12 +4,18 @@ import (
 	"database/sql"
 	"fmt"
 	_ "github.com/lib/pq"
+	"os"
 )
 
 // InitDB создаёт подключение к PostgreSQL
 func InitDB() (*sql.DB, error) {
 	// Строка подключения
-	connStr := "host=localhost port=5432 user=apple dbname=fixly sslmode=disable"
+	//connStr := "host=localhost port=5432 user=apple dbname=fixly sslmode=disable"
+
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		connStr = "host=localhost port=5432 user=apple dbname=fixly sslmode=disable"
+	}
 
 	// Открываем подключение
 	db, err := sql.Open("postgres", connStr)
