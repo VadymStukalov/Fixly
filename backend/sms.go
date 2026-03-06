@@ -100,9 +100,10 @@ func InitiateCall(contractorPhone string, clientPhone string, orderID int) error
 	apiURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Calls.json", TWILIO_ACCOUNT_SID)
 
 	// URL нашего TwiML endpoint — Twilio будет его вызывать
-	twimlURL := fmt.Sprintf("https://rare-zebras-write.loca.lt/api/twiml?client_phone=%s&order_id=%d",
+	//twimlURL := fmt.Sprintf("https://rare-zebras-write.loca.lt/api/twiml?client_phone=%s&order_id=%d",
+	//	url.QueryEscape(clientPhone), orderID)
+	twimlURL := fmt.Sprintf("https://fixly-production.up.railway.app/api/twiml?client_phone=%s&order_id=%d",
 		url.QueryEscape(clientPhone), orderID)
-
 	data := url.Values{}
 	data.Set("To", contractorPhone)
 	data.Set("From", TWILIO_PHONE)
