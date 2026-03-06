@@ -98,7 +98,7 @@ async function callClient() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contractor_phone: contractorPhone,
+        contractor_phone: contractorPhone.value,
         client_phone: order.value.phone,
         order_id: order.value.id
       })
@@ -119,7 +119,8 @@ async function callClient() {
 
 // Получаем contractor_id из localStorage (если залогинен)
 const contractorId = localStorage.getItem('contractorId')
-const contractorPhone = localStorage.getItem('contractorPhone')
+// const contractorPhone = localStorage.getItem('contractorPhone')
+const contractorPhone = ref(localStorage.getItem('contractorPhone') || '')
 
 onMounted(async () => {
   try {
@@ -150,6 +151,8 @@ async function acceptJob() {
       return
     }
 
+    const data = await response.json()
+    contractorPhone.value = data.contractor_phone
     accepted.value = true
   } catch (e) {
     error.value = 'Connection error.'

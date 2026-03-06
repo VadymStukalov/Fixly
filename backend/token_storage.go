@@ -10,18 +10,21 @@ func SaveJobToken(db *sql.DB, orderID int, contractorID int, token string) error
 }
 
 // GetOrderByToken находит заказ по токену
-func GetOrderByToken(db *sql.DB, token string) (*Order, int, error) {
+func GetOrderByToken(db *sql.DB, token string) (*Order, int, string, error) {
 	query := `
         SELECT o.id, o.client_name, o.phone, o.device, o.problem, 
                o.zip_code, o.status, o.price, o.contractor_id,
-               jt.contractor_id
+               jt.contractor_id,
+               c.phone
         FROM orders o
         JOIN job_tokens jt ON jt.order_id = o.id
+        JOIN contractors c ON c.id = jt.contractor_id
         WHERE jt.token = $1 AND jt.used = FALSE
     `
 
 	var order Order
 	var tokenContractorID int
+	var contractorPhone string
 	err := db.QueryRow(query, token).Scan(
 		&order.ID,
 		&order.ClientName,
@@ -33,13 +36,14 @@ func GetOrderByToken(db *sql.DB, token string) (*Order, int, error) {
 		&order.Price,
 		&order.ContractorID,
 		&tokenContractorID,
+		&contractorPhone,
 	)
 
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, "", err
 	}
 
-	return &order, tokenContractorID, nil
+	return &order, tokenContractorID, contractorPhone, nil
 }
 
 // MarkTokenUsed помечает токен как использованный

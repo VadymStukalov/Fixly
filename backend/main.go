@@ -661,7 +661,7 @@ func main() {
 		token := parts[2]
 
 		if r.Method == "GET" {
-			order, _, err := GetOrderByToken(db, token)
+			order, _, _, err := GetOrderByToken(db, token)
 			if err != nil {
 				fmt.Printf("❌ GetOrderByToken error: %v\n", err)
 				http.Error(w, err.Error(), 404)
@@ -672,7 +672,7 @@ func main() {
 		}
 
 		if r.Method == "POST" {
-			order, contractorID, err := GetOrderByToken(db, token)
+			order, contractorID, contractorPhone, err := GetOrderByToken(db, token)
 			if err != nil {
 				fmt.Printf("❌ GetOrderByToken error: %v\n", err)
 				http.Error(w, "Token not found or already used", 404)
@@ -693,7 +693,10 @@ func main() {
 			MarkTokenUsed(db, token)
 
 			fmt.Printf("✅ Order #%d accepted by contractor #%d via token\n", order.ID, contractorID)
-			json.NewEncoder(w).Encode(map[string]bool{"success": true})
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"success":          true,
+				"contractor_phone": contractorPhone,
+			})
 			return
 		}
 
