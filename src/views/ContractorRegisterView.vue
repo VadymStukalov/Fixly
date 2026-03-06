@@ -80,6 +80,7 @@
 </template>
 
 <script setup>
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -100,7 +101,7 @@ async function handleRegister() {
   error.value = ''
 
   try {
-    const response = await fetch('http://localhost:8080/api/contractors/register', {
+    const response = await fetch(`${API_BASE_URL}/api/contractors/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

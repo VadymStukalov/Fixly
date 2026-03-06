@@ -76,6 +76,7 @@
 </template>
 
 <script setup>
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 
@@ -93,7 +94,7 @@ const callInitiated = ref(false)
 async function callClient() {
   calling.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/call', {
+    const response = await fetch(`${API_BASE_URL}/api/call`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -122,7 +123,7 @@ const contractorPhone = localStorage.getItem('contractorPhone')
 
 onMounted(async () => {
   try {
-    const response = await fetch(`http://localhost:8080/accept/${token}`)
+    const response = await fetch(`${API_BASE_URL}/accept/${token}`)
     if (!response.ok) {
       error.value = 'This link is no longer valid or has already been used.'
       return
@@ -143,7 +144,7 @@ async function acceptJob() {
 
   accepting.value = true
   try {
-    const response = await fetch(`http://localhost:8080/accept/${token}`, {
+    const response = await fetch(`${API_BASE_URL}/accept/${token}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contractor_id: parseInt(contractorId) })

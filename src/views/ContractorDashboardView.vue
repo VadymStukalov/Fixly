@@ -191,6 +191,7 @@
 </template>
 
 <script setup>
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -220,7 +221,7 @@ const availableOrders = computed(() => {
 async function loadOrders() {
   loadingOrders.value = true
   try {
-    const response = await fetch('http://localhost:8080/api/orders/available')
+    const response = await fetch(`${API_BASE_URL}/api/orders/available`)
     allOrders.value = await response.json()
   } catch (e) {
     console.error('Error loading orders:', e)
@@ -232,7 +233,7 @@ async function loadOrders() {
 async function loadMyBids() {
   loadingBids.value = true
   try {
-    const response = await fetch(`http://localhost:8080/api/contractors/${contractorId}/bids`)
+    const response = await fetch(`${API_BASE_URL}/api/contractors/${contractorId}/bids`)
     myBids.value = await response.json() || []
   } catch (e) {
     console.error('Error loading bids:', e)
@@ -248,7 +249,7 @@ async function placeBid(orderId) {
   submitting.value[orderId] = true
 
   try {
-    const response = await fetch('http://localhost:8080/api/bids', {
+    const response = await fetch(`${API_BASE_URL}/api/bids`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -371,7 +372,7 @@ async function markAsCompleted(orderId) {
   completing.value[orderId] = true
 
   try {
-    const response = await fetch(`http://localhost:8080/api/orders/${orderId}/complete`, {
+    const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/complete`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

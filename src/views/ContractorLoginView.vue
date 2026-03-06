@@ -57,6 +57,7 @@
 </template>
 
 <script setup>
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -75,7 +76,7 @@ async function handleLogin() {
   error.value = ''
 
   try {
-    const response = await fetch('http://localhost:8080/api/contractors/login', {
+    const response = await fetch(`${API_BASE_URL}/api/contractors/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
