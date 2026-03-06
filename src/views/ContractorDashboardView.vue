@@ -222,7 +222,7 @@ async function loadOrders() {
   loadingOrders.value = true
   try {
     const response = await fetch(`${API_BASE_URL}/api/orders/available`)
-    allOrders.value = await response.json()
+    allOrders.value = await response.json()||[]
   } catch (e) {
     console.error('Error loading orders:', e)
   } finally {
