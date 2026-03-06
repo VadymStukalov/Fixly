@@ -137,17 +137,11 @@ onMounted(async () => {
 })
 
 async function acceptJob() {
-  if (!contractorId) {
-    error.value = 'You must be logged in to accept a job.'
-    return
-  }
-
   accepting.value = true
   try {
     const response = await fetch(`${API_BASE_URL}/accept/${token}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contractor_id: parseInt(contractorId) })
     })
 
     if (!response.ok) {

@@ -191,11 +191,22 @@ func main() {
 			// 👇 ВОТ СЮДА ВСТАВЛЯЕМ
 			if updated.Status == "confirmed" {
 				contractors := contractorStorage.GetAll()
-				if len(contractors) > 0 {
-					token := BroadcastJobToContractors(*updated, contractors, "https://fixly-eta.vercel.app")
-					err := SaveJobToken(db, updated.ID, token)
+				for _, contractor := range contractors {
+					token := GenerateToken()
+					jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
+					message := fmt.Sprintf("New Job - %s repair - %s\nAccept: %s", updated.Device, updated.ZipCode, jobURL)
+
+					err := SaveJobToken(db, updated.ID, contractor.ID, token)
 					if err != nil {
-						fmt.Printf("❌ Failed to save token: %v\n", err)
+						fmt.Printf("❌ Failed to save token for contractor #%d: %v\n", contractor.ID, err)
+						continue
+					}
+
+					err = SendSMS(contractor.Phone, message)
+					if err != nil {
+						fmt.Printf("❌ Failed to send SMS to %s: %v\n", contractor.Phone, err)
+					} else {
+						fmt.Printf("✅ SMS sent to contractor #%d (%s)\n", contractor.ID, contractor.Phone)
 					}
 				}
 			}
@@ -650,10 +661,8 @@ func main() {
 		token := parts[2]
 
 		if r.Method == "GET" {
-			order, err := GetOrderByToken(db, token)
+			order, _, err := GetOrderByToken(db, token)
 			if err != nil {
-				//http.Error(w, "Token not found or already used", 404)
-				//return
 				fmt.Printf("❌ GetOrderByToken error: %v\n", err)
 				http.Error(w, err.Error(), 404)
 				return
@@ -663,41 +672,27 @@ func main() {
 		}
 
 		if r.Method == "POST" {
-			// Атомарно назначаем подрядчика — первый успел
-			order, err := GetOrderByToken(db, token)
+			order, contractorID, err := GetOrderByToken(db, token)
 			if err != nil {
+				fmt.Printf("❌ GetOrderByToken error: %v\n", err)
 				http.Error(w, "Token not found or already used", 404)
 				return
 			}
 
-			// Проверяем что заказ ещё confirmed
 			if order.Status != "confirmed" {
 				http.Error(w, "Order already taken", 400)
 				return
 			}
 
-			// Читаем contractor_id из тела
-			var data struct {
-				ContractorID int `json:"contractor_id"`
-			}
-			json.NewDecoder(r.Body).Decode(&data)
-
-			if data.ContractorID == 0 {
-				http.Error(w, "contractor_id required", 400)
-				return
-			}
-
-			// Назначаем подрядчика
-			err = storage.AssignContractor(order.ID, data.ContractorID)
+			err = storage.AssignContractor(order.ID, contractorID)
 			if err != nil {
 				http.Error(w, "Failed to assign contractor", 500)
 				return
 			}
 
-			// Помечаем токен использованным
 			MarkTokenUsed(db, token)
 
-			fmt.Printf("✅ Order #%d accepted by contractor #%d via token\n", order.ID, data.ContractorID)
+			fmt.Printf("✅ Order #%d accepted by contractor #%d via token\n", order.ID, contractorID)
 			json.NewEncoder(w).Encode(map[string]bool{"success": true})
 			return
 		}
