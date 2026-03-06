@@ -75,6 +75,7 @@
 </template>
 
 <script setup>
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ViewOrderModal from '@/components/admin/ViewOrderModal.vue'
 import EditOrderModal from '@/components/admin/EditOrderModal.vue'
@@ -88,7 +89,7 @@ const isDeleteModalOpen = ref(false)
 
 async function loadOrders() {
   try {
-    const response = await fetch('http://localhost:8080/api/orders')
+    const response = await fetch(`${API_BASE_URL}/api/orders`)
     orders.value = await response.json()
   } catch (e) {
     console.error('Ошибка загрузки:', e)
@@ -136,7 +137,7 @@ async function handleStatusUpdate(newStatus) {
       status:newStatus
     }
 
-    const response = await fetch(`http://localhost:8080/api/orders/${selectedOrder.value.id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/orders/${selectedOrder.value.id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json'
@@ -166,7 +167,7 @@ async function handleStatusUpdate(newStatus) {
 async function handleDelete() {
 
   try {
-    const response = await fetch(`http://localhost:8080/api/orders/${selectedOrder.value.id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/orders/${selectedOrder.value.id}`, {
       method: 'DELETE'
     })
     console.log('Удалить:', selectedOrder.value.id)
