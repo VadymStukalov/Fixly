@@ -408,7 +408,36 @@ func main() {
 		json.NewEncoder(w).Encode(created)
 	})
 
+	// GET /api/contractors — все подрядчики со статистикой (для админки)
+	http.HandleFunc("/api/contractors", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(200)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method != "GET" {
+			http.Error(w, "Method not supported", 405)
+			return
+		}
+
+		stats, err := contractorStorage.GetAllWithStats()
+		if err != nil {
+			fmt.Printf("❌ Failed to get contractor stats: %v\n", err)
+			http.Error(w, "Failed to fetch contractors", 500)
+			return
+		}
+
+		json.NewEncoder(w).Encode(stats)
+	})
+
 	// POST /api/contractors/login
+
 	http.HandleFunc("/api/contractors/login", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")

@@ -3,10 +3,24 @@
     <!-- Шапка -->
     <header class="bg-gradient-to-r from-[#3BA3A9] to-[#6A339E] text-white py-6">
       <div class="container mx-auto px-4">
-        <h1 class="text-2xl font-bold">FIXLY Admin Panel</h1>
-        <div class="mt-2 flex gap-6 text-sm">
-          <span>📊 Всего заказов: {{ orders.length }}</span>
-          <span>🆕 Новых: {{ newOrdersCount }}</span>
+        <div class="flex justify-between items-start">
+          <div>
+            <h1 class="text-2xl font-bold">FIXLY Admin Panel</h1>
+            <div class="mt-2 flex flex-wrap gap-4 text-sm">
+              <span>📊 Всего: {{ orders.length }}</span>
+              <span>🆕 Новых: {{ countByStatus('new') }}</span>
+              <span>✅ Confirmed: {{ countByStatus('confirmed') }}</span>
+              <span>🔧 In Progress: {{ countByStatus('in_progress') }}</span>
+              <span>💰 Lead Sold: {{ countByStatus('lead_sold') }}</span>
+              <span>📵 Unreachable: {{ countByStatus('client_unreachable') }}</span>
+            </div>
+          </div>
+          <router-link
+              to="/admin/contractors"
+              class="bg-white/20 hover:bg-white/30 text-white text-sm font-semibold px-4 py-2 rounded-lg"
+          >
+            👷 Contractors ({{ contractorsCount }})
+          </router-link>
         </div>
       </div>
     </header>
@@ -32,9 +46,9 @@
             <td class="px-6 py-4 text-sm text-gray-500">{{ order.phone }}</td>
             <td class="px-6 py-4 text-sm text-gray-500">{{ order.device }}</td>
             <td class="px-6 py-4">
-                <span :class="getStatusClass(order.status)" class="px-2 py-1 text-xs font-semibold rounded-full">
-                  {{ order.status }}
-                </span>
+              <span :class="getStatusClass(order.status)" class="px-2 py-1 text-xs font-semibold rounded-full">
+                {{ getStatusLabel(order.status) }}
+              </span>
             </td>
             <td class="px-6 py-4 text-sm font-medium space-x-3">
               <button @click="viewOrder(order)" class="text-blue-600 hover:text-blue-900">👁</button>
@@ -75,13 +89,14 @@
 </template>
 
 <script setup>
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ViewOrderModal from '@/components/admin/ViewOrderModal.vue'
 import EditOrderModal from '@/components/admin/EditOrderModal.vue'
 import DeleteOrderModal from '@/components/admin/DeleteOrderModal.vue'
 
 const orders = ref([])
+const contractorsCount = ref(0)
 const selectedOrder = ref(null)
 const isViewModalOpen = ref(false)
 const isEditModalOpen = ref(false)
@@ -96,21 +111,47 @@ async function loadOrders() {
   }
 }
 
-const newOrdersCount = computed(() => {
-  return orders.value.filter(o => o.status === 'новый').length
-})
+async function loadContractorsCount() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/contractors`)
+    const data = await response.json()
+    contractorsCount.value = data ? data.length : 0
+  } catch (e) {
+    console.error('Ошибка загрузки подрядчиков:', e)
+  }
+}
+
+function countByStatus(status) {
+  return orders.value.filter(o => o.status === status).length
+}
+
+function getStatusLabel(status) {
+  const labels = {
+    'new': 'New',
+    'confirmed': 'Confirmed',
+    'in_progress': 'In Progress',
+    'lead_sold': 'Lead Sold',
+    'completed': 'Completed',
+    'cancelled': 'Cancelled',
+    'client_unreachable': 'Unreachable',
+    'reassign': 'Reassign',
+  }
+  return labels[status] || status
+}
 
 function getStatusClass(status) {
   const classes = {
     'new': 'bg-blue-100 text-blue-800',
-    'confirmed': 'bg-blue-100 text-blue-800',
+    'confirmed': 'bg-indigo-100 text-indigo-800',
     'in_progress': 'bg-yellow-100 text-yellow-800',
+    'lead_sold': 'bg-green-100 text-green-800',
     'completed': 'bg-green-100 text-green-800',
-    'cancelled': 'bg-red-100 text-red-800'
+    'cancelled': 'bg-red-100 text-red-800',
+    'client_unreachable': 'bg-orange-100 text-orange-800',
+    'reassign': 'bg-gray-100 text-gray-800',
   }
   return classes[status] || 'bg-gray-100 text-gray-800'
 }
-
 
 function viewOrder(order) {
   selectedOrder.value = order
@@ -128,89 +169,59 @@ function confirmDelete(order) {
 }
 
 async function handleStatusUpdate(newStatus) {
-
-  try{
-    //Формируем данные для запроса
-
-    const updateData={
+  try {
+    const updateData = {
       ...selectedOrder.value,
-      status:newStatus
+      status: newStatus
     }
 
     const response = await fetch(`${API_BASE_URL}/api/orders/${selectedOrder.value.id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updateData)
     })
+
     if (!response.ok) {
       console.error('Ошибка обновления:', response.status)
       return
     }
 
-    // Получаем обновлённый заказ
-    const updated = await response.json()
-    console.log('✅ Заказ обновлён:', updated)
-
-    // Закрываем модалку
     isEditModalOpen.value = false
-
-    // Перезагружаем список
     await loadOrders()
-  } catch (e){
+  } catch (e) {
     console.error('Ошибка:', e)
   }
-
 }
 
 async function handleDelete() {
-
   try {
     const response = await fetch(`${API_BASE_URL}/api/orders/${selectedOrder.value.id}`, {
       method: 'DELETE'
     })
-    console.log('Удалить:', selectedOrder.value.id)
+
     if (!response.ok) {
       console.error('Ошибка удаления:', response.status)
       return
     }
 
-    // Успех! Закрываем модалку
     isDeleteModalOpen.value = false
-
-    // Перезагружаем список заказов
     await loadOrders()
-
-    console.log('✅ Заказ удалён!')
   } catch (e) {
     console.error('Ошибка:', e)
   }
-
-  //
-  // // TODO: здесь будет API запрос на бэк
-  // isDeleteModalOpen.value = false
 }
 
-// onMounted(() => {
-//   loadOrders()
-// })
-// Автоматическое обновление каждые 15 секунд
 let refreshInterval = null
 
 onMounted(() => {
   loadOrders()
-
-  // Запускаем автообновление
+  loadContractorsCount()
   refreshInterval = setInterval(() => {
     loadOrders()
-  }, 15000)  // 15 секунд
+  }, 15000)
 })
 
-// Останавливаем при закрытии страницы
 onUnmounted(() => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-  }
+  if (refreshInterval) clearInterval(refreshInterval)
 })
 </script>

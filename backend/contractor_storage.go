@@ -14,7 +14,6 @@ func NewContractorStorage(db *sql.DB) *ContractorStorage {
 }
 
 // Create создаёт нового подрядчика
-
 func (s *ContractorStorage) Create(contractor Contractor) (Contractor, error) {
 	query := `
         INSERT INTO contractors (name, email, password_hash, phone)
@@ -109,4 +108,65 @@ func (s *ContractorStorage) GetAll() []Contractor {
 	}
 
 	return contractors
+}
+
+// ContractorStats — подрядчик со статистикой для админки
+type ContractorStats struct {
+	ID            int     `json:"id"`
+	Name          string  `json:"name"`
+	Email         string  `json:"email"`
+	Phone         string  `json:"phone"`
+	Rating        float64 `json:"rating"`
+	CreatedAt     string  `json:"created_at"`
+	OrdersTaken   int     `json:"orders_taken"`    // сколько заказов принял (in_progress + lead_sold + completed)
+	OrdersSold    int     `json:"orders_sold"`     // сколько лидов продано (lead_sold)
+	ActiveOrderID *int    `json:"active_order_id"` // активный заказ прямо сейчас (in_progress)
+}
+
+// GetAllWithStats возвращает всех подрядчиков со статистикой
+func (s *ContractorStorage) GetAllWithStats() ([]ContractorStats, error) {
+	query := `
+		SELECT
+			c.id,
+			c.name,
+			c.email,
+			c.phone,
+			c.rating,
+			c.created_at,
+			COUNT(CASE WHEN o.status IN ('in_progress', 'lead_sold', 'completed') THEN 1 END) AS orders_taken,
+			COUNT(CASE WHEN o.status = 'lead_sold' THEN 1 END) AS orders_sold,
+			MAX(CASE WHEN o.status = 'in_progress' THEN o.id END) AS active_order_id
+		FROM contractors c
+		LEFT JOIN orders o ON o.contractor_id = c.id
+		GROUP BY c.id, c.name, c.email, c.phone, c.rating, c.created_at
+		ORDER BY c.created_at DESC
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []ContractorStats
+	for rows.Next() {
+		var cs ContractorStats
+		err := rows.Scan(
+			&cs.ID,
+			&cs.Name,
+			&cs.Email,
+			&cs.Phone,
+			&cs.Rating,
+			&cs.CreatedAt,
+			&cs.OrdersTaken,
+			&cs.OrdersSold,
+			&cs.ActiveOrderID,
+		)
+		if err != nil {
+			continue
+		}
+		result = append(result, cs)
+	}
+
+	return result, nil
 }
