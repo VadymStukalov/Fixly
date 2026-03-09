@@ -56,3 +56,17 @@ func (s *CallLogStorage) HasAnyCallAttempt(orderID int) (bool, error) {
 	}
 	return count > 0, nil
 }
+
+// CountUnansweredCalls считает звонки с duration=0 (клиент не взял трубку)
+func (s *CallLogStorage) CountUnansweredCalls(orderID int) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM call_logs
+		WHERE order_id = $1 AND duration = 0
+	`
+	var count int
+	err := s.db.QueryRow(query, orderID).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}

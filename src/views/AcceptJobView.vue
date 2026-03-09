@@ -24,8 +24,8 @@
           <span class="text-gray-500">Device</span>
           <span class="font-semibold text-gray-900">{{ order.device }}</span>
         </div>
-        <div class="flex justify-between py-2 border-b">
-          <span class="text-gray-500">Problem</span>
+        <div class="flex flex-col py-2 border-b">
+          <span class="text-gray-500 mb-1">Problem</span>
           <span class="font-semibold text-gray-900">{{ order.problem || 'Not specified' }}</span>
         </div>
         <div class="flex justify-between py-2 border-b">
@@ -49,27 +49,37 @@
           <p class="text-yellow-700 text-sm font-semibold">⏱ Call the client within 15 minutes</p>
         </div>
 
-        <!-- Кнопка звонка -->
-        <button
-            v-if="!callInitiated"
-            @click="callClient"
-            :disabled="calling"
-            class="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-xl disabled:opacity-50"
-        >
-          {{ calling ? 'Connecting...' : '📞 Call Client' }}
-        </button>
-
-        <div v-if="callInitiated" class="bg-blue-50 rounded-xl p-4 mt-4">
-          <p class="text-blue-700 font-semibold">📞 Calling you now...</p>
-          <p class="text-blue-500 text-sm mt-1">Answer your phone to connect with the client</p>
-          <!-- Можно позвонить ещё раз -->
-          <button
-              @click="callAgain"
-              class="mt-3 w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm"
-          >
-            Call Again
-          </button>
+        <!-- Клиент недоступен — администратор разбирается -->
+        <div v-if="clientUnreachable" class="bg-orange-50 border border-orange-200 rounded-xl p-4 mb-4">
+          <p class="text-orange-700 font-semibold text-base">📵 Client is not answering</p>
+          <p class="text-orange-600 text-sm mt-2">
+            Our administrator has been notified and will try to reach the client manually.
+            We will update you on this order shortly.
+          </p>
         </div>
+
+        <!-- Кнопка звонка — скрываем если клиент недоступен -->
+        <template v-else>
+          <button
+              v-if="!callInitiated"
+              @click="callClient"
+              :disabled="calling"
+              class="w-full py-4 bg-green-600 hover:bg-green-700 text-white font-bold text-lg rounded-xl disabled:opacity-50"
+          >
+            {{ calling ? 'Connecting...' : '📞 Call Client' }}
+          </button>
+
+          <div v-if="callInitiated" class="bg-blue-50 rounded-xl p-4 mt-4">
+            <p class="text-blue-700 font-semibold">📞 Calling you now...</p>
+            <p class="text-blue-500 text-sm mt-1">Answer your phone to connect with the client</p>
+            <button
+                @click="callAgain"
+                class="mt-3 w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm"
+            >
+              Call Again
+            </button>
+          </div>
+        </template>
       </div>
 
       <!-- Accept button -->
@@ -88,7 +98,7 @@
 
 <script setup>
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
@@ -104,6 +114,28 @@ const callInitiated = ref(false)
 
 const contractorPhone = ref(localStorage.getItem('contractorPhone') || '')
 const contractorId = ref(parseInt(localStorage.getItem('contractorId')) || 0)
+const clientUnreachable = ref(false)
+
+// Polling статуса заказа каждые 15 сек — чтобы подрядчик видел обновление без перезагрузки
+let pollingInterval = null
+
+function startPolling() {
+  pollingInterval = setInterval(async () => {
+    if (!order.value) return
+    try {
+      const response = await fetch(`${API_BASE_URL}/accept/${token}`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.status === 'client_unreachable') {
+          clientUnreachable.value = true
+          clearInterval(pollingInterval)
+        }
+      }
+    } catch (e) {
+      // тихо игнорируем ошибки polling
+    }
+  }, 15000)
+}
 
 onMounted(async () => {
   try {
@@ -137,6 +169,7 @@ async function acceptJob() {
     const data = await response.json()
     contractorPhone.value = data.contractor_phone
     accepted.value = true
+    startPolling() // начинаем следить за статусом заказа
   } catch (e) {
     error.value = 'Connection error.'
   } finally {
@@ -175,4 +208,8 @@ async function callClient() {
 function callAgain() {
   callInitiated.value = false
 }
+
+onUnmounted(() => {
+  if (pollingInterval) clearInterval(pollingInterval)
+})
 </script>

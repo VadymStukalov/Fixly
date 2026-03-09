@@ -654,6 +654,22 @@ func main() {
 			} else {
 				fmt.Printf("💰 Order #%d → lead_sold (call duration: %ds)\n", orderID, duration)
 			}
+		} else if duration == 0 {
+			// Клиент не взял трубку — считаем попытки
+			unanswered, err := callLogStorage.CountUnansweredCalls(orderID)
+			if err != nil {
+				fmt.Printf("❌ Failed to count unanswered calls: %v\n", err)
+			} else if unanswered >= 3 {
+				// 3 неотвеченных звонка — помечаем заказ и уведомляем админа
+				order, found := storage.GetByID(orderID)
+				if found && order.Status != "client_unreachable" {
+					storage.MarkClientUnreachable(orderID)
+					fmt.Printf("📵 Order #%d → client_unreachable (3 unanswered calls)\n", orderID)
+					go NotifyAdminClientUnreachable(*order, contractorID)
+				}
+			} else {
+				fmt.Printf("📵 Order #%d unanswered call #%d/3\n", orderID, unanswered)
+			}
 		}
 
 		// Twilio ждёт 200 OK
