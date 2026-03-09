@@ -35,7 +35,6 @@
       </div>
 
       <!-- Success state -->
-      <!-- Success state -->
       <div v-if="accepted" class="text-center">
         <div class="text-4xl mb-3">✅</div>
         <h2 class="text-xl font-bold text-green-600 mb-2">Job Accepted!</h2>
@@ -43,6 +42,11 @@
         <div class="bg-green-50 rounded-xl p-4 space-y-2 mb-4">
           <p class="font-bold text-gray-900 text-lg">{{ order.client_name }}</p>
           <p class="text-gray-700">{{ order.zip_code }}</p>
+        </div>
+
+        <!-- Таймер 15 минут -->
+        <div class="bg-yellow-50 rounded-xl p-3 mb-4">
+          <p class="text-yellow-700 text-sm font-semibold">⏱ Call the client within 15 minutes</p>
         </div>
 
         <!-- Кнопка звонка -->
@@ -55,9 +59,16 @@
           {{ calling ? 'Connecting...' : '📞 Call Client' }}
         </button>
 
-        <div v-if="callInitiated" class="bg-blue-50 rounded-xl p-4">
+        <div v-if="callInitiated" class="bg-blue-50 rounded-xl p-4 mt-4">
           <p class="text-blue-700 font-semibold">📞 Calling you now...</p>
           <p class="text-blue-500 text-sm mt-1">Answer your phone to connect with the client</p>
+          <!-- Можно позвонить ещё раз -->
+          <button
+              @click="callAgain"
+              class="mt-3 w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-sm"
+          >
+            Call Again
+          </button>
         </div>
       </div>
 
@@ -91,36 +102,8 @@ const accepted = ref(false)
 const calling = ref(false)
 const callInitiated = ref(false)
 
-async function callClient() {
-  calling.value = true
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/call`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contractor_phone: contractorPhone.value,
-        client_phone: order.value.phone,
-        order_id: order.value.id
-      })
-    })
-
-    if (!response.ok) {
-      alert('Failed to initiate call')
-      return
-    }
-
-    callInitiated.value = true
-  } catch (e) {
-    alert('Connection error')
-  } finally {
-    calling.value = false
-  }
-}
-
-// Получаем contractor_id из localStorage (если залогинен)
-const contractorId = localStorage.getItem('contractorId')
-// const contractorPhone = localStorage.getItem('contractorPhone')
 const contractorPhone = ref(localStorage.getItem('contractorPhone') || '')
+const contractorId = ref(parseInt(localStorage.getItem('contractorId')) || 0)
 
 onMounted(async () => {
   try {
@@ -159,5 +142,37 @@ async function acceptJob() {
   } finally {
     accepting.value = false
   }
+}
+
+async function callClient() {
+  calling.value = true
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/call`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contractor_phone: contractorPhone.value,
+        client_phone: order.value.phone,
+        order_id: order.value.id,
+        contractor_id: contractorId.value  // ← передаём для StatusCallback
+      })
+    })
+
+    if (!response.ok) {
+      alert('Failed to initiate call')
+      return
+    }
+
+    callInitiated.value = true
+  } catch (e) {
+    alert('Connection error')
+  } finally {
+    calling.value = false
+  }
+}
+
+// Повторный звонок — сбрасываем callInitiated чтобы показать кнопку снова
+function callAgain() {
+  callInitiated.value = false
 }
 </script>

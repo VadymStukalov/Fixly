@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 )
 
 var (
@@ -19,27 +20,22 @@ var (
 
 // SendSMS отправляет SMS через Twilio REST API
 func SendSMS(to string, message string) error {
-	// URL Twilio API
 	apiURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json", TWILIO_ACCOUNT_SID)
 
-	// Параметры
 	data := url.Values{}
 	data.Set("To", to)
 	data.Set("From", TWILIO_PHONE)
 	data.Set("Body", message)
 
-	// Создаём HTTP запрос
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBufferString(data.Encode()))
 	if err != nil {
 		return err
 	}
 
-	// Basic Auth (Account SID + Auth Token)
 	auth := base64.StdEncoding.EncodeToString([]byte(TWILIO_ACCOUNT_SID + ":" + TWILIO_AUTH_TOKEN))
 	req.Header.Set("Authorization", "Basic "+auth)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	// Отправляем
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -47,7 +43,6 @@ func SendSMS(to string, message string) error {
 	}
 	defer resp.Body.Close()
 
-	// Проверяем статус
 	if resp.StatusCode != 201 {
 		return fmt.Errorf("twilio returned status %d", resp.StatusCode)
 	}
@@ -58,20 +53,15 @@ func SendSMS(to string, message string) error {
 
 // GenerateToken создаёт случайный токен
 func GenerateToken() string {
-	bytes := make([]byte, 16)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
-// BroadcastJobToContractors рассылает SMS всем подрядчикам
+// BroadcastJobToContractors рассылает SMS всем подрядчикам с задержкой 200мс
 func BroadcastJobToContractors(order Order, contractors []Contractor, baseURL string) string {
-	// Генерируем уникальный токен
 	token := GenerateToken()
-
-	// Формируем ссылку
 	jobURL := fmt.Sprintf("%s/accept/%s", baseURL, token)
-
-	// Формируем текст SMS
 	message := fmt.Sprintf(
 		"New Job - %s repair - %s\nAccept: %s",
 		order.Device,
@@ -79,7 +69,6 @@ func BroadcastJobToContractors(order Order, contractors []Contractor, baseURL st
 		jobURL,
 	)
 
-	// Отправляем всем подрядчикам
 	successCount := 0
 	for _, contractor := range contractors {
 		err := SendSMS(contractor.Phone, message)
@@ -88,6 +77,8 @@ func BroadcastJobToContractors(order Order, contractors []Contractor, baseURL st
 		} else {
 			successCount++
 		}
+		// Задержка между SMS чтобы не попасть под спам-фильтры операторов
+		time.Sleep(200 * time.Millisecond)
 	}
 
 	fmt.Printf("📤 Broadcast sent to %d/%d contractors for order #%d\n", successCount, len(contractors), order.ID)
@@ -96,18 +87,29 @@ func BroadcastJobToContractors(order Order, contractors []Contractor, baseURL st
 }
 
 // InitiateCall звонит подрядчику, потом соединяет с клиентом
-func InitiateCall(contractorPhone string, clientPhone string, orderID int) error {
+// Twilio после завершения звонка пришлёт webhook на /api/call-status
+func InitiateCall(contractorPhone string, clientPhone string, orderID int, contractorID int) error {
 	apiURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Calls.json", TWILIO_ACCOUNT_SID)
 
-	// URL нашего TwiML endpoint — Twilio будет его вызывать
-	//twimlURL := fmt.Sprintf("https://rare-zebras-write.loca.lt/api/twiml?client_phone=%s&order_id=%d",
-	//	url.QueryEscape(clientPhone), orderID)
-	twimlURL := fmt.Sprintf("https://fixly-production.up.railway.app/api/twiml?client_phone=%s&order_id=%d",
-		url.QueryEscape(clientPhone), orderID)
+	twimlURL := fmt.Sprintf(
+		"https://fixly-production.up.railway.app/api/twiml?client_phone=%s&order_id=%d",
+		url.QueryEscape(clientPhone), orderID,
+	)
+
+	// StatusCallback — Twilio пришлёт сюда длительность звонка после завершения
+	statusCallbackURL := fmt.Sprintf(
+		"https://fixly-production.up.railway.app/api/call-status?order_id=%d&contractor_id=%d",
+		orderID, contractorID,
+	)
+
 	data := url.Values{}
 	data.Set("To", contractorPhone)
 	data.Set("From", TWILIO_PHONE)
 	data.Set("Url", twimlURL)
+	data.Set("StatusCallback", statusCallbackURL)
+	data.Set("StatusCallbackMethod", "POST")
+	// Twilio шлёт callback на эти события; "completed" содержит итоговую длительность
+	data.Set("StatusCallbackEvent", "completed")
 
 	req, err := http.NewRequest("POST", apiURL, bytes.NewBufferString(data.Encode()))
 	if err != nil {

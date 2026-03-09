@@ -16,24 +16,19 @@ func NewOrderStorage(db *sql.DB) *OrderStorage {
 
 // GetAll возвращает все заказы из базы
 func (s *OrderStorage) GetAll() []Order {
-	// SQL запрос
 	query := "SELECT id, client_name, phone, device, problem, zip_code, status, price, contractor_id FROM orders"
 
-	// Выполняем запрос
 	rows, err := s.db.Query(query)
 	if err != nil {
-		// Если ошибка — возвращаем пустой список
 		return []Order{}
 	}
 	defer rows.Close()
 
 	var orders []Order
 
-	// Перебираем результаты
 	for rows.Next() {
 		var order Order
 
-		// Читаем данные из строки
 		err := rows.Scan(
 			&order.ID,
 			&order.ClientName,
@@ -47,7 +42,7 @@ func (s *OrderStorage) GetAll() []Order {
 		)
 
 		if err != nil {
-			continue // Пропускаем строку с ошибкой
+			continue
 		}
 
 		orders = append(orders, order)
@@ -58,14 +53,12 @@ func (s *OrderStorage) GetAll() []Order {
 
 // Create создаёт новый заказ в базе
 func (s *OrderStorage) Create(order Order) Order {
-	// SQL запрос для вставки
 	query := `
         INSERT INTO orders (client_name, phone, device, problem, zip_code, status, price)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
     `
 
-	// Выполняем запрос и получаем ID
 	err := s.db.QueryRow(
 		query,
 		order.ClientName,
@@ -78,7 +71,6 @@ func (s *OrderStorage) Create(order Order) Order {
 	).Scan(&order.ID)
 
 	if err != nil {
-		// Если ошибка — возвращаем пустой заказ
 		return Order{}
 	}
 
@@ -103,14 +95,13 @@ func (s *OrderStorage) Update(id int, order Order) bool {
 		order.ZipCode,
 		order.Status,
 		order.Price,
-		id, // $8 — это ID заказа который обновляем
+		id,
 	)
 
 	if err != nil {
 		return false
 	}
 
-	// Проверяем сколько строк обновилось
 	rows, _ := result.RowsAffected()
 	return rows > 0
 }
@@ -124,7 +115,6 @@ func (s *OrderStorage) Delete(id int) bool {
 		return false
 	}
 
-	// Проверяем сколько строк удалилось
 	rows, _ := result.RowsAffected()
 	return rows > 0
 }
@@ -163,4 +153,93 @@ func (s *OrderStorage) AssignContractor(orderID int, contractorID int) error {
 
 	_, err := s.db.Exec(query, contractorID, orderID)
 	return err
+}
+
+// AcceptOrder — атомарный захват заказа (защита от race condition)
+// Возвращает true только если именно этот подрядчик успел первым
+func (s *OrderStorage) AcceptOrder(orderID int, contractorID int) (bool, error) {
+	query := `
+		UPDATE orders
+		SET status = 'in_progress', contractor_id = $1, accepted_at = NOW()
+		WHERE id = $2 AND status = 'confirmed'
+	`
+
+	result, err := s.db.Exec(query, contractorID, orderID)
+	if err != nil {
+		return false, err
+	}
+
+	rows, _ := result.RowsAffected()
+	return rows > 0, nil
+}
+
+// ReassignOrder возвращает заказ в пул если подрядчик не позвонил
+func (s *OrderStorage) ReassignOrder(orderID int) error {
+	query := `
+		UPDATE orders
+		SET status = 'confirmed', contractor_id = NULL, accepted_at = NULL
+		WHERE id = $1 AND status = 'in_progress'
+	`
+	_, err := s.db.Exec(query, orderID)
+	return err
+}
+
+// MarkClientUnreachable — подрядчик звонил, но клиент не ответил
+func (s *OrderStorage) MarkClientUnreachable(orderID int) error {
+	query := `
+		UPDATE orders
+		SET status = 'client_unreachable'
+		WHERE id = $1
+	`
+	_, err := s.db.Exec(query, orderID)
+	return err
+}
+
+// MarkLeadSold — звонок 30+ сек, лид продан
+func (s *OrderStorage) MarkLeadSold(orderID int) error {
+	query := `
+		UPDATE orders
+		SET status = 'lead_sold'
+		WHERE id = $1
+	`
+	_, err := s.db.Exec(query, orderID)
+	return err
+}
+
+// GetExpiredAcceptedOrders — заказы в статусе in_progress старше 15 минут
+func (s *OrderStorage) GetExpiredAcceptedOrders() ([]Order, error) {
+	query := `
+		SELECT id, client_name, phone, device, problem, zip_code, status, price, contractor_id
+		FROM orders
+		WHERE status = 'in_progress'
+		AND accepted_at < NOW() - INTERVAL '15 minutes'
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var orders []Order
+	for rows.Next() {
+		var order Order
+		err := rows.Scan(
+			&order.ID,
+			&order.ClientName,
+			&order.Phone,
+			&order.Device,
+			&order.Problem,
+			&order.ZipCode,
+			&order.Status,
+			&order.Price,
+			&order.ContractorID,
+		)
+		if err != nil {
+			continue
+		}
+		orders = append(orders, order)
+	}
+
+	return orders, nil
 }
