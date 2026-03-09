@@ -633,7 +633,13 @@ func main() {
 		// Twilio присылает эти поля в теле POST запроса (form-encoded)
 		callSID := r.FormValue("CallSid")
 		callStatus := r.FormValue("CallStatus")
-		durationStr := r.FormValue("CallDuration")
+		// DialCallDuration — точная длительность разговора с клиентом (с момента когда клиент взял трубку)
+		// Приходит из action="" на <Dial>. Если клиент не взял — будет 0.
+		durationStr := r.FormValue("DialCallDuration")
+		if durationStr == "" {
+			// Fallback: обычный StatusCallback без Dial action (duration всего звонка)
+			durationStr = r.FormValue("CallDuration")
+		}
 
 		duration, _ := strconv.Atoi(durationStr)
 
@@ -685,11 +691,18 @@ func main() {
 
 		fmt.Printf("📞 TwiML called, connecting to client %s (order %s)\n", clientPhone, orderID)
 
+		// action на <Dial> — Twilio пришлёт DialCallStatus и DialCallDuration
+		// когда клиент положит трубку. Это точная длительность разговора с клиентом.
+		dialAction := fmt.Sprintf(
+			"https://fixly-production.up.railway.app/api/call-status?order_id=%s&contractor_id=%s",
+			orderID, r.URL.Query().Get("contractor_id"),
+		)
+
 		w.Write([]byte(fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say>Connecting you to your client now.</Say>
-    <Dial callerId="%s">%s</Dial>
-</Response>`, TWILIO_PHONE, clientPhone)))
+    <Dial callerId="%s" action="%s">%s</Dial>
+</Response>`, TWILIO_PHONE, dialAction, clientPhone)))
 	})
 
 	port := os.Getenv("PORT")

@@ -92,8 +92,8 @@ func InitiateCall(contractorPhone string, clientPhone string, orderID int, contr
 	apiURL := fmt.Sprintf("https://api.twilio.com/2010-04-01/Accounts/%s/Calls.json", TWILIO_ACCOUNT_SID)
 
 	twimlURL := fmt.Sprintf(
-		"https://fixly-production.up.railway.app/api/twiml?client_phone=%s&order_id=%d",
-		url.QueryEscape(clientPhone), orderID,
+		"https://fixly-production.up.railway.app/api/twiml?client_phone=%s&order_id=%d&contractor_id=%d",
+		url.QueryEscape(clientPhone), orderID, contractorID,
 	)
 
 	// StatusCallback — Twilio пришлёт сюда длительность звонка после завершения
