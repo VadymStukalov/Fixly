@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -759,6 +761,11 @@ func main() {
 				RetellLLMDynamicVars map[string]string `json:"retell_llm_dynamic_variables"`
 			} `json:"call"`
 		}
+
+		// Логируем полный payload для отладки
+		bodyBytes, _ := io.ReadAll(r.Body)
+		fmt.Printf("📞 Retell raw webhook: %s\n", string(bodyBytes))
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 		err := json.NewDecoder(r.Body).Decode(&payload)
 		if err != nil {
