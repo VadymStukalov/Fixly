@@ -257,6 +257,16 @@ func main() {
 			created := storage.Create(newOrder)
 			w.WriteHeader(201)
 			json.NewEncoder(w).Encode(created)
+
+			// Через 2 минуты Retell перезвонит клиенту для подтверждения
+			go func() {
+				time.Sleep(2 * time.Minute)
+				err := InitiateRetellCall(created.Phone, created.ID, created.ClientName, created.Device)
+				if err != nil {
+					fmt.Printf("❌ Retell call failed for order #%d: %v\n", created.ID, err)
+				}
+			}()
+
 			return
 		}
 
@@ -732,6 +742,105 @@ func main() {
     <Say>Connecting you to your client now.</Say>
     <Dial callerId="%s" action="%s">%s</Dial>
 </Response>`, TWILIO_PHONE, dialAction, clientPhone)))
+	})
+
+	// POST /api/retell-webhook — Retell присылает результат звонка
+	http.HandleFunc("/api/retell-webhook", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(200)
+			return
+		}
+
+		var payload struct {
+			Event string `json:"event"`
+			Call  struct {
+				CallID               string            `json:"call_id"`
+				EndedReason          string            `json:"ended_reason"`
+				RetellLLMDynamicVars map[string]string `json:"retell_llm_dynamic_variables"`
+			} `json:"call"`
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&payload)
+		if err != nil {
+			fmt.Printf("❌ Retell webhook decode error: %v\n", err)
+			w.WriteHeader(200)
+			return
+		}
+
+		fmt.Printf("📞 Retell webhook: event=%s, ended_reason=%s\n", payload.Event, payload.Call.EndedReason)
+
+		// Нас интересует только событие завершения звонка
+		if payload.Event != "call_ended" {
+			w.WriteHeader(200)
+			return
+		}
+
+		// Получаем order_id из dynamic variables
+		orderIDStr := payload.Call.RetellLLMDynamicVars["order_id"]
+		if orderIDStr == "" {
+			fmt.Println("❌ Retell webhook: no order_id in dynamic vars")
+			w.WriteHeader(200)
+			return
+		}
+
+		orderID, err := strconv.Atoi(orderIDStr)
+		if err != nil {
+			fmt.Printf("❌ Retell webhook: invalid order_id: %s\n", orderIDStr)
+			w.WriteHeader(200)
+			return
+		}
+
+		// Если клиент подтвердил (звонок завершён не из-за отказа) — переводим в confirmed
+		// ended_reason: "user_hangup" или "agent_hangup" = нормальное завершение
+		// "voicemail_reached" или "no_answer" = не дозвонились
+		switch payload.Call.EndedReason {
+		case "user_hangup", "agent_hangup":
+			// Клиент поговорил с AI — подтверждаем заказ
+			order, found := storage.GetByID(orderID)
+			if !found {
+				fmt.Printf("❌ Retell webhook: order #%d not found\n", orderID)
+				w.WriteHeader(200)
+				return
+			}
+			order.Status = "confirmed"
+			storage.Update(orderID, *order)
+			fmt.Printf("✅ Order #%d confirmed after Retell call\n", orderID)
+
+			// Рассылаем SMS подрядчикам
+			contractors := contractorStorage.GetAll()
+			for _, contractor := range contractors {
+				token := GenerateToken()
+				jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
+				message := fmt.Sprintf(
+					"Fixly Lead\n%s repair - %s\nCustomer confirmed by phone\nAccept: %s",
+					order.Device, order.ZipCode, jobURL,
+				)
+				err := SaveJobToken(db, orderID, contractor.ID, token)
+				if err != nil {
+					fmt.Printf("❌ Failed to save token for contractor #%d: %v\n", contractor.ID, err)
+					continue
+				}
+				SendSMS(contractor.Phone, message)
+				time.Sleep(200 * time.Millisecond)
+			}
+
+		case "voicemail_reached", "no_answer":
+			// Клиент не ответил — уведомляем админа в Telegram
+			order, found := storage.GetByID(orderID)
+			if found {
+				msg := fmt.Sprintf(
+					"📵 <b>Client did not answer AI call</b>\n\nOrder #%d\nClient: %s\nPhone: %s\nDevice: %s\n\nPlease call manually to confirm.",
+					order.ID, order.ClientName, order.Phone, order.Device,
+				)
+				go SendTelegramMessage(msg)
+				fmt.Printf("📵 Order #%d: client did not answer Retell call\n", orderID)
+			}
+
+		default:
+			fmt.Printf("⚠️ Order #%d: Retell ended with reason: %s\n", orderID, payload.Call.EndedReason)
+		}
+
+		w.WriteHeader(200)
 	})
 
 	port := os.Getenv("PORT")
