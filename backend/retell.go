@@ -10,7 +10,7 @@ import (
 
 var RETELL_API_KEY = os.Getenv("RETELL_API_KEY")
 
-const RETELL_AGENT_ID = "agent_fbdf096c0cabbeebbdfc934e69"
+const RETELL_AGENT_ID = "agent_913d07e3c228c2ab12391c05bf"
 
 // InitiateRetellCall — запускает исходящий AI звонок клиенту через Retell
 func InitiateRetellCall(phone string, orderID int, clientName string, device string) error {
