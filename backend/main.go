@@ -757,7 +757,7 @@ func main() {
 			Event string `json:"event"`
 			Call  struct {
 				CallID               string            `json:"call_id"`
-				EndedReason          string            `json:"ended_reason"`
+				DisconnectionReason  string            `json:"disconnection_reason"`
 				RetellLLMDynamicVars map[string]string `json:"retell_llm_dynamic_variables"`
 			} `json:"call"`
 		}
@@ -774,7 +774,7 @@ func main() {
 			return
 		}
 
-		fmt.Printf("📞 Retell webhook: event=%s, ended_reason=%s\n", payload.Event, payload.Call.EndedReason)
+		fmt.Printf("📞 Retell webhook: event=%s, disconnection_reason=%s\n", payload.Event, payload.Call.DisconnectionReason)
 
 		// Нас интересует только событие завершения звонка
 		if payload.Event != "call_ended" {
@@ -800,7 +800,7 @@ func main() {
 		// Если клиент подтвердил (звонок завершён не из-за отказа) — переводим в confirmed
 		// ended_reason: "user_hangup" или "agent_hangup" = нормальное завершение
 		// "voicemail_reached" или "no_answer" = не дозвонились
-		switch payload.Call.EndedReason {
+		switch payload.Call.DisconnectionReason {
 		case "user_hangup", "agent_hangup":
 			// Клиент поговорил с AI — подтверждаем заказ
 			order, found := storage.GetByID(orderID)
@@ -844,7 +844,7 @@ func main() {
 			}
 
 		default:
-			fmt.Printf("⚠️ Order #%d: Retell ended with reason: %s\n", orderID, payload.Call.EndedReason)
+			fmt.Printf("⚠️ Order #%d: Retell ended with reason: %s\n", orderID, payload.Call.DisconnectionReason)
 		}
 
 		w.WriteHeader(200)
