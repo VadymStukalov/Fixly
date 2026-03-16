@@ -112,8 +112,8 @@ const accepted = ref(false)
 const calling = ref(false)
 const callInitiated = ref(false)
 
-const contractorPhone = ref(localStorage.getItem('contractorPhone') || '')
-const contractorId = ref(parseInt(localStorage.getItem('contractorId')) || 0)
+const contractorPhone = ref('')
+const contractorId = ref(0)
 const clientUnreachable = ref(false)
 
 // Polling статуса заказа каждые 15 сек — чтобы подрядчик видел обновление без перезагрузки
@@ -168,8 +168,9 @@ async function acceptJob() {
 
     const data = await response.json()
     contractorPhone.value = data.contractor_phone
+    contractorId.value = data.contractor_id
     accepted.value = true
-    startPolling() // начинаем следить за статусом заказа
+    startPolling()
   } catch (e) {
     error.value = 'Connection error.'
   } finally {

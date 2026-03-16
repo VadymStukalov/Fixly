@@ -603,6 +603,7 @@ func main() {
 			json.NewEncoder(w).Encode(map[string]interface{}{
 				"success":          true,
 				"contractor_phone": contractorPhone,
+				"contractor_id":    contractorID,
 			})
 			return
 		}
@@ -730,7 +731,7 @@ func main() {
 		clientPhone := r.URL.Query().Get("client_phone")
 		orderID := r.URL.Query().Get("order_id")
 
-		fmt.Printf("📞 TwiML called, connecting to client %s (order %s)\n", clientPhone, orderID)
+		fmt.Printf("📞 TwiML called, connecting to client %s (order %s), TWILIO_PHONE=%s\n", clientPhone, orderID, TWILIO_PHONE)
 
 		// action на <Dial> — Twilio пришлёт DialCallStatus и DialCallDuration
 		// когда клиент положит трубку. Это точная длительность разговора с клиентом.
