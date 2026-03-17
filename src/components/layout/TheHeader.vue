@@ -10,7 +10,7 @@
     <button
         class="px-[23px] py-[6px] text-sm shadow-sm font-brand font-bold rounded-full text-white bg-gradient-to-r from-[#3BA3A9] to-[#6A339E] hover:opacity-90 transition-opacity"
         @click="showPopup = true"
-    >Get a Quote</button>
+    >Book a Repair</button>
 
     <!-- Попап с полем телефона -->
     <div
