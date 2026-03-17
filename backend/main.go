@@ -45,6 +45,28 @@ type Bid struct {
 	ProposedTime string `json:"proposed_time"`
 }
 
+// GetCityByZip возвращает название города по ZIP коду через Zippopotam.us
+func GetCityByZip(zip string) string {
+	if zip == "" {
+		return zip
+	}
+	resp, err := http.Get("https://api.zippopotam.us/us/" + zip)
+	if err != nil || resp.StatusCode != 200 {
+		return zip
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Places []struct {
+			PlaceName string `json:"place name"`
+		} `json:"places"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || len(result.Places) == 0 {
+		return zip
+	}
+	return fmt.Sprintf("%s (%s)", result.Places[0].PlaceName, zip)
+}
+
 // isBusinessHours проверяет что сейчас рабочее время в LA (8:00-20:00 PT)
 func isBusinessHours() bool {
 	loc, _ := time.LoadLocation("America/Los_Angeles")
@@ -210,9 +232,10 @@ func main() {
 				for _, contractor := range contractors {
 					token := GenerateToken()
 					jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
+					area := GetCityByZip(updated.ZipCode)
 					message := fmt.Sprintf(
 						"🔧 FIXLY — New Lead\n\nAppliance: %s\nArea: %s\n✅ Customer verified by admin\n💰 Lead price: $55\n\nAccept job (limited time):\n%s",
-						updated.Device, updated.ZipCode, jobURL,
+						updated.Device, area, jobURL,
 					)
 
 					err := SaveJobToken(db, updated.ID, contractor.ID, token)
@@ -858,9 +881,10 @@ func main() {
 				for _, contractor := range contractors {
 					token := GenerateToken()
 					jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
+					area := GetCityByZip(o.ZipCode)
 					message := fmt.Sprintf(
 						"🔧 FIXLY — New Lead\n\nAppliance: %s\nArea: %s\n✅ Customer verified by phone\n💰 Lead price: $55\n\nAccept job (limited time):\n%s",
-						o.Device, o.ZipCode, jobURL,
+						o.Device, area, jobURL,
 					)
 					err := SaveJobToken(db, o.ID, contractor.ID, token)
 					if err != nil {
@@ -1003,9 +1027,10 @@ func main() {
 			for _, contractor := range contractors {
 				token := GenerateToken()
 				jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
+				area := GetCityByZip(o.ZipCode)
 				message := fmt.Sprintf(
 					"🔧 FIXLY — New Lead\n\nAppliance: %s %s\nArea: %s\n✅ Customer verified by phone\n💰 Lead price: $55\n\nAccept job (limited time):\n%s",
-					o.Brand, o.Device, o.ZipCode, jobURL,
+					o.Brand, o.Device, area, jobURL,
 				)
 				err := SaveJobToken(db, o.ID, contractor.ID, token)
 				if err != nil {
