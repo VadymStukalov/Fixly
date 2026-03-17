@@ -19,7 +19,7 @@
         @click.self="showPopup = false"
     >
       <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm">
-        <h2 class="text-xl font-bold text-gray-900 mb-2">Get a Free Quote</h2>
+        <h2 class="text-xl font-bold text-gray-900 mb-2">Book a repair Now</h2>
         <p class="text-gray-500 text-sm mb-6">Enter your phone number and our AI assistant will call you right now to take your request.</p>
 
         <input
