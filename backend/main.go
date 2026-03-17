@@ -43,6 +43,27 @@ type Bid struct {
 	ProposedTime string `json:"proposed_time"`
 }
 
+// isBusinessHours проверяет что сейчас рабочее время в LA (8:00-20:00 PT)
+func isBusinessHours() bool {
+	loc, _ := time.LoadLocation("America/Los_Angeles")
+	now := time.Now().In(loc)
+	hour := now.Hour()
+	return hour >= 8 && hour < 20
+}
+
+// nextBusinessHour возвращает время следующего открытия (8:00 утра PT)
+func nextBusinessHour() time.Duration {
+	loc, _ := time.LoadLocation("America/Los_Angeles")
+	now := time.Now().In(loc)
+	next := time.Date(now.Year(), now.Month(), now.Day(), 8, 0, 0, 0, loc)
+	if now.Hour() >= 20 || now.Hour() < 8 {
+		if now.Hour() >= 20 {
+			next = next.Add(24 * time.Hour)
+		}
+	}
+	return time.Until(next)
+}
+
 func main() {
 	db, err := InitDB()
 	if err != nil {
@@ -261,8 +282,15 @@ func main() {
 			json.NewEncoder(w).Encode(created)
 
 			// Через 2 минуты Retell перезвонит клиенту для подтверждения
+			// Если сейчас не рабочее время (до 8:00 или после 20:00 PT) — ждём до 8:00 утра
 			go func() {
-				time.Sleep(2 * time.Minute)
+				if isBusinessHours() {
+					time.Sleep(2 * time.Minute)
+				} else {
+					waitDur := nextBusinessHour() + 2*time.Minute
+					fmt.Printf("🕐 Order #%d: outside business hours, calling at 8am PT (in %v)\n", created.ID, waitDur.Round(time.Minute))
+					time.Sleep(waitDur)
+				}
 				err := InitiateRetellCall(created.Phone, created.ID, created.ClientName, created.Device)
 				if err != nil {
 					fmt.Printf("❌ Retell call failed for order #%d: %v\n", created.ID, err)
@@ -814,23 +842,30 @@ func main() {
 			storage.Update(orderID, *order)
 			fmt.Printf("✅ Order #%d confirmed after Retell call\n", orderID)
 
-			// Рассылаем SMS подрядчикам
-			contractors := contractorStorage.GetAll()
-			for _, contractor := range contractors {
-				token := GenerateToken()
-				jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
-				message := fmt.Sprintf(
-					"Fixly Lead\n%s repair - %s\nCustomer confirmed by phone\nAccept: %s",
-					order.Device, order.ZipCode, jobURL,
-				)
-				err := SaveJobToken(db, orderID, contractor.ID, token)
-				if err != nil {
-					fmt.Printf("❌ Failed to save token for contractor #%d: %v\n", contractor.ID, err)
-					continue
+			// Рассылаем SMS подрядчикам — только в рабочее время (8:00-20:00 PT)
+			go func(o Order) {
+				if !isBusinessHours() {
+					waitDur := nextBusinessHour()
+					fmt.Printf("🕐 Order #%d confirmed but outside business hours, SMS at 8am PT (in %v)\n", o.ID, waitDur.Round(time.Minute))
+					time.Sleep(waitDur)
 				}
-				SendSMS(contractor.Phone, message)
-				time.Sleep(200 * time.Millisecond)
-			}
+				contractors := contractorStorage.GetAll()
+				for _, contractor := range contractors {
+					token := GenerateToken()
+					jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
+					message := fmt.Sprintf(
+						"Fixly Lead\n%s repair - %s\nCustomer confirmed by phone\nAccept: %s",
+						o.Device, o.ZipCode, jobURL,
+					)
+					err := SaveJobToken(db, o.ID, contractor.ID, token)
+					if err != nil {
+						fmt.Printf("❌ Failed to save token for contractor #%d: %v\n", contractor.ID, err)
+						continue
+					}
+					SendSMS(contractor.Phone, message)
+					time.Sleep(200 * time.Millisecond)
+				}
+			}(*order)
 
 		case "voicemail_reached", "no_answer":
 			// Клиент не ответил — уведомляем админа в Telegram
