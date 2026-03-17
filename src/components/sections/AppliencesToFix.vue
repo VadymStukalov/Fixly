@@ -63,7 +63,7 @@ const appliences = {
   airConditioner: {
     id:7,
     name: 'Air Conditioner',
-    image: 'img/air-conditioner-2.png'
+    image: 'img/air-conditioner-usa-2.png'
   },
   microwaveOven: {
     id:8,
@@ -73,7 +73,7 @@ const appliences = {
   boiler: {
     id:9,
     name: 'Boiler',
-    image: 'img/boiler-2.png'
+    image: 'img/boiler-6.png'
   }
 }
 
