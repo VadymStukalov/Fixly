@@ -210,7 +210,10 @@ func main() {
 				for _, contractor := range contractors {
 					token := GenerateToken()
 					jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
-					message := fmt.Sprintf("New Job - %s repair - %s\nAccept: %s", updated.Device, updated.ZipCode, jobURL)
+					message := fmt.Sprintf(
+						"🔧 FIXLY — New Lead\n\nAppliance: %s\nArea: %s\n✅ Customer verified by admin\n💰 Lead price: $55\n\nAccept job (limited time):\n%s",
+						updated.Device, updated.ZipCode, jobURL,
+					)
 
 					err := SaveJobToken(db, updated.ID, contractor.ID, token)
 					if err != nil {
@@ -856,7 +859,7 @@ func main() {
 					token := GenerateToken()
 					jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
 					message := fmt.Sprintf(
-						"Fixly Lead\n%s repair - %s\nCustomer confirmed by phone\nAccept: %s",
+						"🔧 FIXLY — New Lead\n\nAppliance: %s\nArea: %s\n✅ Customer verified by phone\n💰 Lead price: $55\n\nAccept job (limited time):\n%s",
 						o.Device, o.ZipCode, jobURL,
 					)
 					err := SaveJobToken(db, o.ID, contractor.ID, token)
@@ -1001,7 +1004,7 @@ func main() {
 				token := GenerateToken()
 				jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
 				message := fmt.Sprintf(
-					"Fixly Lead\n%s %s repair - %s\nCustomer confirmed by phone\nAccept: %s",
+					"🔧 FIXLY — New Lead\n\nAppliance: %s %s\nArea: %s\n✅ Customer verified by phone\n💰 Lead price: $55\n\nAccept job (limited time):\n%s",
 					o.Brand, o.Device, o.ZipCode, jobURL,
 				)
 				err := SaveJobToken(db, o.ID, contractor.ID, token)
