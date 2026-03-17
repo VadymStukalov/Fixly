@@ -14,15 +14,17 @@ import (
 
 // Order — заказ на ремонт
 type Order struct {
-	ID           int    `json:"id"`
-	ClientName   string `json:"client_name"`
-	Phone        string `json:"phone"`
-	Device       string `json:"device"`
-	Problem      string `json:"problem"`
-	ZipCode      string `json:"zip_code"`
-	Status       string `json:"status"`
-	Price        int    `json:"price"`
-	ContractorID *int   `json:"contractor_id"`
+	ID            int    `json:"id"`
+	ClientName    string `json:"client_name"`
+	Phone         string `json:"phone"`
+	Device        string `json:"device"`
+	Brand         string `json:"brand"`
+	Problem       string `json:"problem"`
+	ZipCode       string `json:"zip_code"`
+	PreferredTime string `json:"preferred_time"`
+	Status        string `json:"status"`
+	Price         int    `json:"price"`
+	ContractorID  *int   `json:"contractor_id"`
 }
 
 // Contractor — подрядчик
@@ -884,6 +886,135 @@ func main() {
 		}
 
 		w.WriteHeader(200)
+	})
+
+	// POST /api/call-quote — клиент вводит телефон, создаём черновик заказа и звоним сразу
+	http.HandleFunc("/api/call-quote", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(200)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.Method != "POST" {
+			http.Error(w, "Method not supported", 405)
+			return
+		}
+
+		var data struct {
+			Phone string `json:"phone"`
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&data)
+		if err != nil || data.Phone == "" {
+			http.Error(w, "phone required", 400)
+			return
+		}
+
+		// Создаём черновик заказа — только телефон, остальное AI соберёт
+		draft := storage.Create(Order{
+			Phone:      data.Phone,
+			ClientName: "Unknown",
+			Device:     "Unknown",
+			Status:     "new",
+			Price:      0,
+		})
+
+		fmt.Printf("📞 Quote call requested for %s, draft order #%d\n", data.Phone, draft.ID)
+
+		// Звоним сразу (не через 2 минуты) — используем агента для сбора данных
+		go func() {
+			err := InitiateRetellQuoteCall(data.Phone, draft.ID)
+			if err != nil {
+				fmt.Printf("❌ Quote call failed for order #%d: %v\n", draft.ID, err)
+			}
+		}()
+
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success":  true,
+			"order_id": draft.ID,
+		})
+	})
+
+	// POST /api/orders/confirm-from-call — Retell Function вызывает это когда AI собрал все данные
+	http.HandleFunc("/api/orders/confirm-from-call", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(200)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		var data struct {
+			OrderID       int    `json:"order_id"`
+			ClientName    string `json:"client_name"`
+			Device        string `json:"device"`
+			Brand         string `json:"brand"`
+			Problem       string `json:"problem"`
+			ZipCode       string `json:"zip_code"`
+			PreferredTime string `json:"preferred_time"`
+		}
+
+		err := json.NewDecoder(r.Body).Decode(&data)
+		if err != nil {
+			http.Error(w, "Invalid JSON", 400)
+			return
+		}
+
+		// Валидация — все поля обязательны
+		if data.OrderID == 0 || data.Device == "" || data.ZipCode == "" || data.Problem == "" {
+			http.Error(w, "order_id, device, zip_code and problem required", 400)
+			return
+		}
+
+		// Обновляем заказ с данными собранными AI
+		order, found := storage.GetByID(data.OrderID)
+		if !found {
+			http.Error(w, "Order not found", 404)
+			return
+		}
+
+		order.ClientName = data.ClientName
+		order.Device = data.Device
+		order.Brand = data.Brand
+		order.Problem = data.Problem
+		order.ZipCode = data.ZipCode
+		order.PreferredTime = data.PreferredTime
+		order.Status = "confirmed"
+
+		storage.Update(data.OrderID, *order)
+		fmt.Printf("✅ Order #%d confirmed via AI call with full details\n", data.OrderID)
+
+		// Рассылаем SMS подрядчикам
+		go func(o Order) {
+			contractors := contractorStorage.GetAll()
+			for _, contractor := range contractors {
+				token := GenerateToken()
+				jobURL := fmt.Sprintf("https://fixly-eta.vercel.app/accept/%s", token)
+				message := fmt.Sprintf(
+					"Fixly Lead\n%s %s repair - %s\nCustomer confirmed by phone\nAccept: %s",
+					o.Brand, o.Device, o.ZipCode, jobURL,
+				)
+				err := SaveJobToken(db, o.ID, contractor.ID, token)
+				if err != nil {
+					fmt.Printf("❌ Failed to save token: %v\n", err)
+					continue
+				}
+				SendSMS(contractor.Phone, message)
+				time.Sleep(200 * time.Millisecond)
+			}
+		}(*order)
+
+		json.NewEncoder(w).Encode(map[string]bool{"success": true})
 	})
 
 	port := os.Getenv("PORT")
