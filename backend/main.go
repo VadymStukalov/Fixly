@@ -106,23 +106,32 @@ func main() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
+			// 1. Проверяем просроченные заказы в in_progress (15 мин без звонка)
 			expiredOrders, err := storage.GetExpiredAcceptedOrders()
 			if err != nil {
 				fmt.Println("❌ Worker error:", err)
 				continue
 			}
 			for _, order := range expiredOrders {
-				// Проверяем были ли вообще звонки
 				hadCall, _ := callLogStorage.HasAnyCallAttempt(order.ID)
 				if hadCall {
-					// Звонил, но клиент не ответил (нет 30+ сек) — ручная проверка
 					storage.MarkClientUnreachable(order.ID)
 					fmt.Printf("📵 Order #%d → client_unreachable (called but no answer)\n", order.ID)
 				} else {
-					// Вообще не звонил — возвращаем в пул
 					storage.ReassignOrder(order.ID)
 					fmt.Printf("🔄 Order #%d → reassigned (no call attempt in 15 min)\n", order.ID)
 				}
+			}
+
+			// 2. Чистим брошенные черновики из Get a Quote (new + Unknown + старше 30 мин)
+			_, err = db.Exec(`
+				UPDATE orders SET status = 'cancelled'
+				WHERE status = 'new'
+				AND client_name = 'Unknown'
+				AND created_at < NOW() - INTERVAL '30 minutes'
+			`)
+			if err != nil {
+				fmt.Printf("❌ Worker: failed to clean draft orders: %v\n", err)
 			}
 		}
 	}()
@@ -214,6 +223,13 @@ func main() {
 				return
 			}
 
+			// Сохраняем предыдущий статус ДО обновления — защита от повторной рассылки
+			prevOrder, _ := storage.GetByID(id)
+			prevStatus := ""
+			if prevOrder != nil {
+				prevStatus = prevOrder.Status
+			}
+
 			success := storage.Update(id, updateData)
 			if !success {
 				http.Error(w, "Заказ не найден", 404)
@@ -226,8 +242,8 @@ func main() {
 				return
 			}
 
-			// Рассылка SMS при смене статуса на confirmed
-			if updated.Status == "confirmed" {
+			// Рассылка SMS только если статус ИЗМЕНИЛСЯ на confirmed (не был confirmed раньше)
+			if updated.Status == "confirmed" && prevStatus != "confirmed" {
 				contractors := contractorStorage.GetAll()
 				for _, contractor := range contractors {
 					token := GenerateToken()
@@ -896,20 +912,37 @@ func main() {
 				}
 			}(*order)
 
-		case "voicemail_reached", "no_answer":
-			// Клиент не ответил — уведомляем админа в Telegram
+		case "voicemail_reached", "no_answer", "dial_no_answer":
+			// Клиент не ответил — помечаем заказ и уведомляем админа
 			order, found := storage.GetByID(orderID)
 			if found {
+				order.Status = "unconfirmed"
+				storage.Update(orderID, *order)
 				msg := fmt.Sprintf(
 					"📵 <b>Client did not answer AI call</b>\n\nOrder #%d\nClient: %s\nPhone: %s\nDevice: %s\n\nPlease call manually to confirm.",
 					order.ID, order.ClientName, order.Phone, order.Device,
 				)
 				go SendTelegramMessage(msg)
-				fmt.Printf("📵 Order #%d: client did not answer Retell call\n", orderID)
+				fmt.Printf("📵 Order #%d → unconfirmed (no answer on AI call)\n", orderID)
+			}
+
+		case "user_hangup_early", "call_error":
+			// Клиент бросил трубку сразу или ошибка — отменяем заказ
+			order, found := storage.GetByID(orderID)
+			if found && order.Status == "new" {
+				order.Status = "cancelled"
+				storage.Update(orderID, *order)
+				fmt.Printf("❌ Order #%d → cancelled (client hung up early)\n", orderID)
 			}
 
 		default:
-			fmt.Printf("⚠️ Order #%d: Retell ended with reason: %s\n", orderID, payload.Call.DisconnectionReason)
+			// Любой другой reason кроме успешного — отменяем если заказ ещё new
+			order, found := storage.GetByID(orderID)
+			if found && order.Status == "new" {
+				order.Status = "cancelled"
+				storage.Update(orderID, *order)
+			}
+			fmt.Printf("⚠️ Order #%d → cancelled (Retell reason: %s)\n", orderID, payload.Call.DisconnectionReason)
 		}
 
 		w.WriteHeader(200)

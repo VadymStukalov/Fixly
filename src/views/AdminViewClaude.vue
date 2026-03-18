@@ -13,6 +13,8 @@
               <span>🔧 In Progress: {{ countByStatus('in_progress') }}</span>
               <span>💰 Lead Sold: {{ countByStatus('lead_sold') }}</span>
               <span>📵 Unreachable: {{ countByStatus('client_unreachable') }}</span>
+              <span>❓ Unconfirmed: {{ countByStatus('unconfirmed') }}</span>
+              <span>❌ Cancelled: {{ countByStatus('cancelled') }}</span>
             </div>
           </div>
           <router-link
@@ -135,6 +137,8 @@ function getStatusLabel(status) {
     'cancelled': 'Cancelled',
     'client_unreachable': 'Unreachable',
     'reassign': 'Reassign',
+    'unconfirmed': 'Unconfirmed',
+    'cancelled': 'Cancelled',
   }
   return labels[status] || status
 }
@@ -149,6 +153,8 @@ function getStatusClass(status) {
     'cancelled': 'bg-red-100 text-red-800',
     'client_unreachable': 'bg-orange-100 text-orange-800',
     'reassign': 'bg-gray-100 text-gray-800',
+    'unconfirmed': 'bg-yellow-100 text-yellow-800',
+    'cancelled': 'bg-red-100 text-red-800',
   }
   return classes[status] || 'bg-gray-100 text-gray-800'
 }
